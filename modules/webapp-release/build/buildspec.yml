@@ -1,0 +1,44 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      nodejs: ${APP_NODE_VERSION}
+    commands:
+      # Change to base dir
+      - cd ${APP_BASE_DIR}
+
+      # Extract downloaded node_modules cache if any
+      - |
+        if [ -f "node_modules.tar.gz" ]; then
+          echo Unzipping node_modules cache
+          tar -zxf node_modules.tar.gz && echo "extract cached deps succeeded" || echo "extract cached deps failed"
+        fi
+
+      # Install dependencies
+      - echo Installing app dependencies ...
+      - ${APP_INSTALL_CMD}
+
+  pre_build:
+    commands:
+      # Pull parameters and save to .env
+      - echo Pulling parameters and exporting to .env file...
+      - PARAMS=$(aws secretsmanager get-secret-value --secret-id ${APP_PARAMETERS_ID} --query SecretString --output text)
+      - echo $PARAMS | jq -r 'to_entries|map("\(.key)=\(.value|tostring)")|.[]' > .env
+
+  build:
+    commands:
+      # Build, deploy and invalidate web cache
+      - echo Building static site...
+      - ${APP_BUILD_CMD}
+      - aws s3 sync ${APP_BUILD_DIR}/. s3://${APP_S3_WEB_BUCKET} --delete --acl public-read --only-show-errors
+      - aws cloudfront create-invalidation --distribution-id ${APP_DISTRIBUTION_ID} --paths '/*'
+
+  post_build:
+    commands:
+      # Save node_modules cache
+      - tar -zcf node_modules.tar.gz node_modules && echo "compress deps succeeded" || echo "compress deps failed"
+
+cache:
+  paths:
+    - 'node_modules.tar.gz'
