@@ -53,7 +53,7 @@ variable "compute_type" {
 }
 
 variable "image" {
-  default = "aws/codebuild/amazonlinux2-x86_64-standard:3.0"
+  default = "aws/codebuild/standard:5.0"
 }
 
 variable "type" {
